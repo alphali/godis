@@ -2,19 +2,23 @@ package main
 
 import (
 	"fmt"
+	"godis/core"
 	"log"
 	"net"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 )
+
+// 服务端实例
+var godis = new(core.Server)
 
 func main() {
 	/*---- 命令行参数处理 ----*/
 	argv := os.Args
 	argc := len(os.Args)
 	if argc >= 2 {
-		//j := 1 /* First option to parse in Args[] */
 		/* Handle special options --help and --version */
 		if argv[1] == "-v" || argv[1] == "--version" {
 			version()
@@ -22,21 +26,15 @@ func main() {
 		if argv[1] == "--help" || argv[1] == "-h" {
 			usage()
 		}
-		if argv[1] == "--test-memory" {
-			if argc == 3 {
-				os.Exit(0)
-			} else {
-				println("Please specify the amount of memory to test in megabytes.\n")
-				println("Example: ./godis-server --test-memory 4096\n\n")
-				os.Exit(1)
-			}
-		}
 	}
 
 	/*---- 监听信号 平滑退出 ----*/
 	c := make(chan os.Signal)
 	signal.Notify(c, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT, syscall.SIGUSR1, syscall.SIGUSR2)
 	go sigHandler(c)
+
+	/*---- 初始化服务端实例 ----*/
+	initServer()
 
 	/*---- 网络处理 ----*/
 	netListen, err := net.Listen("tcp", "127.0.0.1:9736")
@@ -48,47 +46,61 @@ func main() {
 
 	for {
 		conn, err := netListen.Accept()
+
 		if err != nil {
 			continue
 		}
+		//log.Println(conn.LocalAddr(), conn.RemoteAddr())
 		go handle(conn)
 	}
 }
 
 // 处理请求
 func handle(conn net.Conn) {
+	c := godis.CreateClient(conn)
 	for {
-		buff, err := readQueryFromClient(conn)
+		err := c.ReadQueryFromClient(conn)
+
 		if err != nil {
-			log.Println("readQueryFromClient err")
+			log.Println("readQueryFromClient err", err)
 			return
 		}
-		result := processInputBuffer(buff)
-		writeToClient(conn, result)
+		c.ProcessInputBuffer()
+		godis.ProcessCommand(c)
+		responseConn(conn, c)
 	}
-}
-
-// 读取客户端请求信息
-func readQueryFromClient(conn net.Conn) (buf string, err error) {
-	buff := make([]byte, 512)
-	n, err := conn.Read(buff)
-	if err != nil {
-		log.Println("conn.Read err!=nil", err, "---len---", n, conn)
-		conn.Close()
-		return "", err
-	}
-	buf = string(buff)
-	return buf, nil
-}
-
-// 处理客户端请求信息
-func processInputBuffer(buff string) string {
-	return buff + "from Mars"
 }
 
 // 响应返回给客户端
-func writeToClient(conn net.Conn, buff string) {
-	conn.Write([]byte(buff))
+func responseConn(conn net.Conn, c *core.Client) {
+	conn.Write([]byte(c.Buf))
+}
+
+// 初始化服务端实例
+func initServer() {
+	godis.Pid = os.Getpid()
+	godis.DbNum = 16
+	initDb()
+	godis.Start = time.Now().UnixNano() / 1000000
+	//var getf server.CmdFun
+
+	getCommand := &core.GodisCommand{Name: "get", Proc: core.GetCommand}
+	setCommand := &core.GodisCommand{Name: "set", Proc: core.SetCommand}
+
+	godis.Commands = map[string]*core.GodisCommand{
+		"get": getCommand,
+		"set": setCommand,
+	}
+}
+
+// 初始化db
+func initDb() {
+	godis.Db = make([]*core.GodisDb, godis.DbNum)
+	for i := 0; i < godis.DbNum; i++ {
+		godis.Db[i] = new(core.GodisDb)
+		godis.Db[i].Dict = make(map[string]*core.GodisObject, 100)
+	}
+	fmt.Println("init db begin-->", godis.Db)
 }
 
 func sigHandler(c chan os.Signal) {
