@@ -17,9 +17,11 @@ func main() {
 	tcpAddr, err := net.ResolveTCPAddr("tcp4", IPPort)
 	checkError(err)
 
+	//建立连接 如果第二个参数(本地地址)为nil，会自动生成一个本地地址
 	conn, err := net.DialTCP("tcp", nil, tcpAddr)
 	checkError(err)
 	defer conn.Close()
+	//log.Println(tcpAddr, conn.LocalAddr(), conn.RemoteAddr())
 
 	for {
 		fmt.Print(IPPort + "> ")
