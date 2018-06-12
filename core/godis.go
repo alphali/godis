@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"regexp"
+	"strings"
 )
 
 //Client 与服务端连接之后即创建一个Client结构
@@ -68,13 +69,12 @@ func SetCommand(c *Client, s *Server) {
 			c.Db.Dict[stringKey] = CreateObject(ObjectTypeString, stringValue)
 		}
 	}
-	addReply(c, objKey)
+	addReply(c, CreateObject(ObjectTypeString, "OK"))
 }
 
 // GetCommand get命令实现
 func GetCommand(c *Client, s *Server) {
 	o := lookupKey(c.Db, c.Argv[1])
-	fmt.Println("GetCommand ", o)
 	if o != nil {
 		addReply(c, o)
 	} else {
@@ -106,7 +106,6 @@ func (s *Server) ProcessCommand(c *Client) {
 
 // lookupCommand查找命令
 func lookupCommand(name string, s *Server) *GodisCommand {
-	fmt.Println("lookupCommand", name, s.Commands)
 	if cmd, ok := s.Commands[name]; ok {
 		return cmd
 	}
@@ -119,10 +118,7 @@ func call(c *Client, s *Server) {
 	c.Cmd.Proc(c, s)
 }
 func lookupKey(db *GodisDb, key *GodisObject) (ret *GodisObject) {
-	o, ok := db.Dict[key.Ptr.(string)]
-	fmt.Println("lookupKey ", o, ok, db.Dict, key.Ptr)
-	if ok {
-		fmt.Println("ok, key exist ", o)
+	if o, ok := db.Dict[key.Ptr.(string)]; ok {
 		return o
 	}
 	return nil
@@ -141,19 +137,22 @@ func (s *Server) CreateClient(conn net.Conn) (c *Client) {
 func (c *Client) ReadQueryFromClient(conn net.Conn) (err error) {
 	buff := make([]byte, 512)
 	n, err := conn.Read(buff)
+
 	if err != nil {
 		log.Println("conn.Read err!=nil", err, "---len---", n, conn)
 		conn.Close()
 		return err
 	}
-	c.QueryBuf = string(buff)
+	tmp := string(buff)
+	parts := strings.Split(tmp, "\n")
+	c.QueryBuf = parts[0]
 	return nil
 }
 
 // ProcessInputBuffer 处理客户端请求信息
 func (c *Client) ProcessInputBuffer() {
 	r := regexp.MustCompile("[^\\s]+")
-	parts := r.FindAllString(c.QueryBuf, -1)
+	parts := r.FindAllString(strings.Trim(c.QueryBuf, " "), -1)
 	argc, argv := len(parts), parts
 	c.Argc = argc
 	//c.Argv = make([]*object.GodisObject, 5)
