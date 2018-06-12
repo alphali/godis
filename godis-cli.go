@@ -6,7 +6,6 @@ import (
 	"log"
 	"net"
 	"os"
-	"strings"
 )
 
 func main() {
@@ -27,7 +26,7 @@ func main() {
 		fmt.Print(IPPort + "> ")
 		text, _ := reader.ReadString('\n')
 		//清除掉回车换行符
-		text = strings.Replace(text, "\n", "", -1)
+		//text = strings.Replace(text, "\n", "", -1)
 		send2Server(text, conn)
 
 		buff := make([]byte, 1024)
