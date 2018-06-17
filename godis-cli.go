@@ -3,9 +3,11 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"godis/core/proto"
 	"log"
 	"net"
 	"os"
+	"strings"
 )
 
 func main() {
@@ -26,7 +28,7 @@ func main() {
 		fmt.Print(IPPort + "> ")
 		text, _ := reader.ReadString('\n')
 		//清除掉回车换行符
-		//text = strings.Replace(text, "\n", "", -1)
+		text = strings.Replace(text, "\n", "", -1)
 		send2Server(text, conn)
 
 		buff := make([]byte, 1024)
@@ -41,8 +43,12 @@ func main() {
 
 }
 func send2Server(msg string, conn net.Conn) (n int, err error) {
-	data := []byte(msg)
-	n, err = conn.Write(data)
+	p, e := proto.EncodeCmd(msg)
+	if e != nil {
+		return 0, e
+	}
+	//fmt.Println("proto encode", p, string(p))
+	n, err = conn.Write(p)
 	return n, err
 }
 func checkError(err error) {
