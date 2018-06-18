@@ -33,11 +33,14 @@ func main() {
 
 		buff := make([]byte, 1024)
 		n, err := conn.Read(buff)
+		resp, er := proto.DecodeFromBytes(buff)
 		checkError(err)
 		if n == 0 {
 			fmt.Println(IPPort+"> ", "nil")
+		} else if er == nil {
+			fmt.Println(IPPort+">", string(resp.Value))
 		} else {
-			fmt.Println(IPPort+">", string(buff))
+			fmt.Println(IPPort+"> ", "err server response")
 		}
 	}
 

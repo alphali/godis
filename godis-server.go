@@ -65,7 +65,11 @@ func handle(conn net.Conn) {
 			log.Println("readQueryFromClient err", err)
 			return
 		}
-		c.ProcessInputBuffer()
+		err = c.ProcessInputBuffer()
+		if err != nil {
+			log.Println("ProcessInputBuffer err", err)
+			return
+		}
 		godis.ProcessCommand(c)
 		responseConn(conn, c)
 	}
@@ -100,7 +104,7 @@ func initDb() {
 		godis.Db[i] = new(core.GodisDb)
 		godis.Db[i].Dict = make(map[string]*core.GodisObject, 100)
 	}
-	fmt.Println("init db begin-->", godis.Db)
+	//fmt.Println("init db fin ", godis.Db)
 }
 
 func sigHandler(c chan os.Signal) {
