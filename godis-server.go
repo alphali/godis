@@ -104,7 +104,6 @@ func initDb() {
 		godis.Db[i] = new(core.GodisDb)
 		godis.Db[i].Dict = make(map[string]*core.GodisObject, 100)
 	}
-	//fmt.Println("init db fin ", godis.Db)
 }
 
 func sigHandler(c chan os.Signal) {
