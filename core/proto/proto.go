@@ -434,6 +434,7 @@ func (d *Decoder) decodeMultiBulk() ([]*Resp, error) {
 		return nil, errorsTrace(err)
 	}
 	n, err := d.decodeInt()
+
 	if err != nil {
 		return nil, errorsTrace(err)
 	}
@@ -465,6 +466,27 @@ type Resp struct {
 	Array []*Resp
 }
 
+func NewString(value []byte) *Resp {
+	r := &Resp{}
+	r.Type = TypeString
+	r.Value = value
+	return r
+}
+
+func NewError(value []byte) *Resp {
+	r := &Resp{}
+	r.Type = TypeError
+	r.Value = value
+	return r
+}
+
+func NewInt(value []byte) *Resp {
+	r := &Resp{}
+	r.Type = TypeInt
+	r.Value = value
+	return r
+}
+
 // NewBulkBytes 批量回复类型
 func NewBulkBytes(value []byte) *Resp {
 	r := &Resp{}
@@ -482,7 +504,7 @@ func NewArray(array []*Resp) *Resp {
 }
 func errorsTrace(err error) error {
 	if err != nil {
-		log.Println(err.Error())
+		log.Println("errors Tracing", err.Error())
 	}
 	return err
 }
