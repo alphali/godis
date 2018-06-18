@@ -1,12 +1,13 @@
 package core
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
+	"godis/core/proto"
 	"log"
 	"net"
 	"os"
-	"regexp"
-	"strings"
 )
 
 //Client 与服务端连接之后即创建一个Client结构
@@ -61,30 +62,43 @@ func SetCommand(c *Client, s *Server) {
 	objKey := c.Argv[1]
 	objValue := c.Argv[2]
 	if c.Argc != 3 {
-		addReply(c, CreateObject(ObjectTypeString, "(error) ERR wrong number of arguments for 'set' command"))
-		return
+		addReplyError(c, "(error) ERR wrong number of arguments for 'set' command")
 	}
 	if stringKey, ok1 := objKey.Ptr.(string); ok1 {
 		if stringValue, ok2 := objValue.Ptr.(string); ok2 {
 			c.Db.Dict[stringKey] = CreateObject(ObjectTypeString, stringValue)
 		}
 	}
-	addReply(c, CreateObject(ObjectTypeString, "OK"))
+	addReplyStatus(c, "OK")
 }
 
 // GetCommand get命令实现
 func GetCommand(c *Client, s *Server) {
 	o := lookupKey(c.Db, c.Argv[1])
 	if o != nil {
-		addReply(c, o)
+		addReplyStatus(c, o.Ptr.(string))
 	} else {
-		addReply(c, CreateObject(ObjectTypeString, "nil"))
+		addReplyStatus(c, "nil")
 	}
 }
 
 // addReply 添加回复
 func addReply(c *Client, o *GodisObject) {
 	c.Buf = o.Ptr.(string)
+}
+
+func addReplyStatus(c *Client, s string) {
+	r := proto.NewString([]byte(s))
+	addReplyString(c, r)
+}
+func addReplyError(c *Client, s string) {
+	r := proto.NewError([]byte(s))
+	addReplyString(c, r)
+}
+func addReplyString(c *Client, r *proto.Resp) {
+	if ret, err := proto.EncodeToBytes(r); err == nil {
+		c.Buf = string(ret)
+	}
 }
 
 // ProcessCommand 执行命令
@@ -96,11 +110,12 @@ func (s *Server) ProcessCommand(c *Client) {
 		os.Exit(1)
 	}
 	cmd := lookupCommand(name, s)
+	fmt.Println(cmd, name, s)
 	if cmd != nil {
 		c.Cmd = cmd
 		call(c, s)
 	} else {
-		addReply(c, CreateObject(ObjectTypeString, fmt.Sprintf("(error) ERR unknown command '%s'", name)))
+		addReplyError(c, fmt.Sprintf("(error) ERR unknown command '%s'", name))
 	}
 }
 
@@ -143,22 +158,22 @@ func (c *Client) ReadQueryFromClient(conn net.Conn) (err error) {
 		conn.Close()
 		return err
 	}
-	tmp := string(buff)
-	parts := strings.Split(tmp, "\n")
-	c.QueryBuf = parts[0]
+	c.QueryBuf = string(buff)
 	return nil
 }
 
 // ProcessInputBuffer 处理客户端请求信息
-func (c *Client) ProcessInputBuffer() {
-	r := regexp.MustCompile("[^\\s]+")
-	parts := r.FindAllString(strings.Trim(c.QueryBuf, " "), -1)
-	argc, argv := len(parts), parts
-	c.Argc = argc
-	//c.Argv = make([]*object.GodisObject, 5)
-	j := 0
-	for _, v := range argv {
-		c.Argv[j] = CreateObject(ObjectTypeString, v)
-		j++
+func (c *Client) ProcessInputBuffer() error {
+	//r := regexp.MustCompile("[^\\s]+")
+	decoder := proto.NewDecoder(bytes.NewReader([]byte(c.QueryBuf)))
+	//decoder := proto.NewDecoder(bytes.NewReader([]byte("*2\r\n$3\r\nget\r\n")))
+	if resp, err := decoder.DecodeMultiBulk(); err == nil {
+		c.Argc = len(resp)
+		c.Argv = make([]*GodisObject, c.Argc)
+		for k, s := range resp {
+			c.Argv[k] = CreateObject(ObjectTypeString, string(s.Value))
+		}
+		return nil
 	}
+	return errors.New("ProcessInputBuffer failed")
 }
