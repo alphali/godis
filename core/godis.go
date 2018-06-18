@@ -18,6 +18,7 @@ type Client struct {
 	Db       *GodisDb
 	QueryBuf string
 	Buf      string
+	FakeFlag bool
 }
 
 //GodisCommand redis命令结构
@@ -69,6 +70,7 @@ func SetCommand(c *Client, s *Server) {
 			c.Db.Dict[stringKey] = CreateObject(ObjectTypeString, stringValue)
 		}
 	}
+	s.Dirty++
 	addReplyStatus(c, "OK")
 }
 
@@ -129,8 +131,13 @@ func lookupCommand(name string, s *Server) *GodisCommand {
 
 // call 真正调用命令
 func call(c *Client, s *Server) {
-	//fmt.Println("server call ", c.Cmd.Name, c.Cmd.Proc, s.Db)
+	dirty := s.Dirty
 	c.Cmd.Proc(c, s)
+	dirty = s.Dirty - dirty
+	if dirty > 0 && !c.FakeFlag {
+		AppendToFile(s.AofFilename, c.QueryBuf)
+	}
+
 }
 func lookupKey(db *GodisDb, key *GodisObject) (ret *GodisObject) {
 	if o, ok := db.Dict[key.Ptr.(string)]; ok {
@@ -140,10 +147,9 @@ func lookupKey(db *GodisDb, key *GodisObject) (ret *GodisObject) {
 }
 
 // CreateClient 连接建立 创建client记录当前连接
-func (s *Server) CreateClient(conn net.Conn) (c *Client) {
+func (s *Server) CreateClient() (c *Client) {
 	c = new(Client)
 	c.Db = s.Db[0]
-	c.Argv = make([]*GodisObject, 5)
 	c.QueryBuf = ""
 	return c
 }

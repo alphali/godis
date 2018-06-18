@@ -11,6 +11,10 @@ import (
 	"time"
 )
 
+const (
+	DefaultAofFile = "./godis.aof"
+)
+
 // 服务端实例
 var godis = new(core.Server)
 
@@ -57,7 +61,7 @@ func main() {
 
 // 处理请求
 func handle(conn net.Conn) {
-	c := godis.CreateClient(conn)
+	c := godis.CreateClient()
 	for {
 		err := c.ReadQueryFromClient(conn)
 
@@ -87,6 +91,7 @@ func initServer() {
 	initDb()
 	godis.Start = time.Now().UnixNano() / 1000000
 	//var getf server.CmdFun
+	godis.AofFilename = DefaultAofFile
 
 	getCommand := &core.GodisCommand{Name: "get", Proc: core.GetCommand}
 	setCommand := &core.GodisCommand{Name: "set", Proc: core.SetCommand}
@@ -95,6 +100,7 @@ func initServer() {
 		"get": getCommand,
 		"set": setCommand,
 	}
+	LoadData()
 }
 
 // 初始化db
@@ -103,6 +109,19 @@ func initDb() {
 	for i := 0; i < godis.DbNum; i++ {
 		godis.Db[i] = new(core.GodisDb)
 		godis.Db[i].Dict = make(map[string]*core.GodisObject, 100)
+	}
+}
+func LoadData() {
+	c := godis.CreateClient()
+	c.FakeFlag = true
+	pros := core.ReadAof(godis.AofFilename)
+	for _, v := range pros {
+		c.QueryBuf = string(v)
+		err := c.ProcessInputBuffer()
+		if err != nil {
+			log.Println("ProcessInputBuffer err", err)
+		}
+		godis.ProcessCommand(c)
 	}
 }
 
