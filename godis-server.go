@@ -63,19 +63,28 @@ func main() {
 func handle(conn net.Conn) {
 	c := godis.CreateClient()
 	for {
-		err := c.ReadQueryFromClient(conn)
+		if c.Flags&core.CLIENT_PUBSUB > 0 {
+			if c.Buf != "" {
+				responseConn(conn, c)
+				c.Buf = ""
+			}
+			time.Sleep(1)
 
-		if err != nil {
-			log.Println("readQueryFromClient err", err)
-			return
+		} else {
+			err := c.ReadQueryFromClient(conn)
+
+			if err != nil {
+				log.Println("readQueryFromClient err", err)
+				return
+			}
+			err = c.ProcessInputBuffer()
+			if err != nil {
+				log.Println("ProcessInputBuffer err", err)
+				return
+			}
+			godis.ProcessCommand(c)
+			responseConn(conn, c)
 		}
-		err = c.ProcessInputBuffer()
-		if err != nil {
-			log.Println("ProcessInputBuffer err", err)
-			return
-		}
-		godis.ProcessCommand(c)
-		responseConn(conn, c)
 	}
 }
 
@@ -95,11 +104,29 @@ func initServer() {
 
 	getCommand := &core.GodisCommand{Name: "get", Proc: core.GetCommand}
 	setCommand := &core.GodisCommand{Name: "set", Proc: core.SetCommand}
+	subscribeCommand := &core.GodisCommand{Name: "subscribe", Proc: core.SubscribeCommand}
+	publishCommand := &core.GodisCommand{Name: "publish", Proc: core.PublishCommand}
+	geoaddCommand := &core.GodisCommand{Name: "geoadd", Proc: core.GeoAddCommand}
+	geohashCommand := &core.GodisCommand{Name: "geohash", Proc: core.GeoHashCommand}
+	geoposCommand := &core.GodisCommand{Name: "geopos", Proc: core.GeoPosCommand}
+	geodistCommand := &core.GodisCommand{Name: "geodist", Proc: core.GeoDistCommand}
+	georadiusCommand := &core.GodisCommand{Name: "georadius", Proc: core.GeoRadiusCommand}
+	georadiusbymemberCommand := &core.GodisCommand{Name: "georadiusbymember", Proc: core.GeoRadiusByMemberCommand}
 
 	godis.Commands = map[string]*core.GodisCommand{
-		"get": getCommand,
-		"set": setCommand,
+		"get":               getCommand,
+		"set":               setCommand,
+		"geoadd":            geoaddCommand,
+		"geohash":           geohashCommand,
+		"geopos":            geoposCommand,
+		"geodist":           geodistCommand,
+		"georadius":         georadiusCommand,
+		"georadiusbymember": georadiusbymemberCommand,
+		"subscribe":         subscribeCommand,
+		"publish":           publishCommand,
 	}
+	tmp := make(map[string]*core.List)
+	godis.PubSubChannels = &tmp
 	LoadData()
 }
 
